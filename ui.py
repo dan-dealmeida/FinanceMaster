@@ -6,6 +6,10 @@ from services import TransactionService, CategoryService
 from event_manager import EventManager
 from reporting_strategy import ReportGenerator, CategoryReportStrategy, MonthlyReportStrategy
 
+# Importações para gráficos
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+
 class MainApplication(tk.Tk):
     """
     Classe principal da aplicação que gerencia a janela e as diferentes views (telas).
@@ -17,7 +21,7 @@ class MainApplication(tk.Tk):
         self.category_service = category_service
 
         self.title("Sistema de Gerenciamento Financeiro Pessoal")
-        self.geometry("900x600") # Tamanho inicial da janela
+        self.geometry("900x700") # Aumenta o tamanho inicial da janela para acomodar gráficos
         self.create_widgets()
         self.current_view = None
         self.show_home_view()
@@ -418,10 +422,13 @@ class CategoryManagerView(BaseView):
 
 
 class ReportView(BaseView):
-    """View para gerar e exibir relatórios financeiros."""
+    """View para gerar e exibir relatórios financeiros com texto e gráfico."""
     def __init__(self, parent, event_manager, transaction_service, category_service):
         super().__init__(parent, event_manager, transaction_service, category_service)
         self.report_generator = ReportGenerator(CategoryReportStrategy()) # Estratégia padrão
+        self.figure = None # Variável para armazenar a figura do matplotlib
+        self.canvas_widget = None # Variável para armazenar o widget do canvas
+
         self.create_widgets()
         self.generate_report() # Gera o relatório inicial
 
@@ -457,9 +464,13 @@ class ReportView(BaseView):
         ttk.Button(control_frame, text="Gerar Relatório", command=self.generate_report).pack(side="left", padx=10)
 
         # Área de texto para exibir o relatório
-        self.report_text = tk.Text(self, wrap="word", height=20, width=80, font=("Consolas", 10))
-        self.report_text.pack(pady=10, fill="both", expand=True)
+        self.report_text = tk.Text(self, wrap="word", height=10, width=80, font=("Consolas", 10))
+        self.report_text.pack(pady=10, fill="both", expand=False) # Não expande para deixar espaço para o gráfico
         self.report_text.config(state="disabled") # Torna o Text Read-Only
+
+        # Frame para o gráfico
+        self.chart_frame = ttk.Frame(self, borderwidth=2, relief="groove")
+        self.chart_frame.pack(pady=10, fill="both", expand=True) # Expande para ocupar o espaço restante
 
     def on_report_type_select(self, event):
         """Muda a estratégia de relatório com base na seleção do usuário."""
@@ -470,8 +481,71 @@ class ReportView(BaseView):
             self.report_generator.set_strategy(MonthlyReportStrategy())
         self.generate_report() # Gera o relatório com a nova estratégia
 
+    def _clear_plot(self):
+        """Limpa o gráfico existente, se houver."""
+        if self.canvas_widget:
+            self.canvas_widget.destroy()
+            self.canvas_widget = None
+        if self.figure:
+            plt.close(self.figure) # Fecha a figura para liberar memória
+            self.figure = None
+
+    def _draw_plot(self, data_for_plot, report_type):
+        """
+        Desenha o gráfico com base nos dados e tipo de relatório.
+        :param data_for_plot: DataFrame do pandas com os dados para plotagem.
+        :param report_type: 'category' ou 'monthly' para determinar o tipo de gráfico.
+        """
+        self._clear_plot() # Limpa qualquer gráfico anterior
+
+        if data_for_plot.empty:
+            return # Não desenha nada se não há dados
+
+        self.figure = plt.Figure(figsize=(7, 4), dpi=100) # Cria uma nova figura
+        ax = self.figure.add_subplot(111)
+
+        if report_type == "category":
+            # Gráfico de barras para categorias (separando receitas e despesas)
+            # Para melhor visualização, podemos ter duas barras por categoria ou um gráfico de pizza para cada tipo
+            # Vamos usar barras agrupadas ou separadas por tipo
+            
+            income_data = data_for_plot[data_for_plot['Tipo'] == 'Receita']
+            expense_data = data_for_plot[data_for_plot['Tipo'] == 'Despesa']
+
+            if not income_data.empty:
+                ax.bar(income_data['Categoria'], income_data['Valor'], label='Receitas', color='green', alpha=0.7)
+            if not expense_data.empty:
+                ax.bar(expense_data['Categoria'], expense_data['Valor'], label='Despesas', color='red', alpha=0.7)
+            
+            ax.set_title("Transações por Categoria")
+            ax.set_xlabel("Categoria")
+            ax.set_ylabel("Valor (R$)")
+            ax.tick_params(axis='x', rotation=45)
+            for label in ax.get_xticklabels():
+                label.set_ha('right') # Rotaciona os labels do eixo X
+            ax.legend()
+            self.figure.tight_layout() # Ajusta o layout para evitar sobreposição
+
+        elif report_type == "monthly":
+            # Gráfico de linha para balanço mensal
+            ax.plot(data_for_plot['Mês'], data_for_plot['Balanço Total'], marker='o', linestyle='-', color='blue')
+            ax.set_title("Balanço Mensal")
+            ax.set_xlabel("Mês")
+            ax.set_ylabel("Balanço (R$)")
+            for label in ax.get_xticklabels():
+                label.set_ha('right') # Rotaciona os labels do eixo X
+            ax.grid(True)
+            self.figure.tight_layout()
+
+        # Integra o gráfico no Tkinter
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.chart_frame)
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.canvas.draw()
+
+
     def generate_report(self, *args):
-        """Coleta os dados e gera o relatório usando a estratégia selecionada."""
+        """Coleta os dados e gera o relatório usando a estratégia selecionada, e plota o gráfico."""
         start_date = self.start_date_entry.get()
         end_date = self.end_date_entry.get()
 
@@ -485,12 +559,18 @@ class ReportView(BaseView):
             self.report_text.delete(1.0, tk.END)
             self.report_text.insert(tk.END, "Erro: Formato de data inválido.")
             self.report_text.config(state="disabled")
+            self._clear_plot()
             return
 
         transactions_data = self.transaction_service.get_transactions_for_report(start_date, end_date)
-        report_output = self.report_generator.execute_report_generation(transactions_data)
 
+        # Gerar relatório textual
+        report_output = self.report_generator.execute_report_generation(transactions_data)
         self.report_text.config(state="normal") # Habilita para escrita
         self.report_text.delete(1.0, tk.END) # Limpa conteúdo anterior
         self.report_text.insert(tk.END, report_output) # Insere o novo relatório
         self.report_text.config(state="disabled") # Desabilita novamente
+
+        # Gerar dados para o gráfico e plotar
+        data_for_plot = self.report_generator.get_report_data(transactions_data)
+        self._draw_plot(data_for_plot, self.report_type_var.get())
