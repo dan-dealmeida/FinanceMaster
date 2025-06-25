@@ -1,0 +1,50 @@
+# Arquivos e diretórios gerados pelo Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.egg-info/
+.coverage
+.pytest_cache/
+htmlcov/
+dist/
+build/
+
+# Bancos de dados
+*.db
+*.sqlite
+*.sqlite3
+
+# Arquivos específicos do ambiente de desenvolvimento (VS Code, etc.)
+.vscode/
+.idea/  # Se usar PyCharm ou IntelliJ
+*.sublime-project
+*.sublime-workspace
+
+# Arquivos de log
+*.log
+*.log.*
+
+# Arquivos temporários e de backup
+*~
+*.bak
+*.swp
+*.swo
+
+# Configurações de ambiente
+.env
+.flaskenv
+
+# Outros arquivos de metadados
+.DS_Store
+Thumbs.db
+
+# Arquivos específicos do seu projeto (baseado na imagem)
+# finance_tracker.db - Seu arquivo de banco de dados SQLite
+finance_tracker.db
+
+# pyvenv.cfg - Arquivo de configuração do ambiente virtual
+pyvenv.cfg
